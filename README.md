@@ -1,102 +1,138 @@
 # Contributor Atlas
 
-A local, native macOS app for exploring this repository’s contributors. SwiftUI,
-Swift Charts and AppKit; no web server, backend deployment, npm dependencies, or
-external analytics service. Requires macOS 14+ and Xcode command-line tools to build.
+A native macOS app for exploring who works on a Git repository, when, and on what.
+
+Point it at any local checkout and get a contribution calendar, activity charts,
+per-person profiles, a contributor × work-area matrix, and searchable commit
+history, with every filter intersecting. It is built with SwiftUI, Swift Charts
+and AppKit. There is no server, no network access and no analytics: it reads
+your local Git history and never modifies the repository.
+
+![Overview: stat tiles, contribution calendar, weekly and hourly activity](docs/screenshots/overview.png)
+
+<sub>Screenshots show the public [apple/swift-nio](https://github.com/apple/swift-nio) repository.</sub>
+
+## Features
+
+- **Overview.** GitHub-style annual contribution calendar, weekly timeline,
+  hourly histogram, weekday × hour heatmap, and a contributor table with sparklines.
+- **Contributors.** Compare activity across people, then select one for their own
+  calendar, frequency, work profile, most-touched files and commits.
+- **Work areas.** A contributor × area matrix. Click a cell to filter to that
+  person and area together.
+- **Commit history.** Paginated, searchable commits with a changed-file inspector.
+- **Methodology.** In-app definitions for every number the app shows.
+- **Filters that compose.** Date range, person, work area, search, people vs bots,
+  merges, selected day, weekday and hour all intersect. Click a calendar day,
+  heatmap cell or bar to drill in; clear chips to back out.
+- **Timezones.** Los Angeles, UTC, or each commit's author-local time.
+- **CSV export** of every matching commit (not just the visible page), with
+  spreadsheet formula injection neutralized.
+- **Native Mac behaviour.** Back/forward history, a collapsible sidebar, system
+  accent and light/dark appearance, Liquid Glass on macOS 26+.
+
+| Contributors | Work areas |
+| --- | --- |
+| ![Contributor activity table with sparklines](docs/screenshots/contributors.png) | ![Contributor by work-area matrix](docs/screenshots/work-areas.png) |
+
+| Commit history | Methodology |
+| --- | --- |
+| ![Searchable commit list](docs/screenshots/commit-history.png) | ![In-app methodology notes](docs/screenshots/methodology.png) |
+
+## Install
+
+Requires macOS 14 or later and the Xcode command-line tools.
 
 ```sh
-# From the repository root:
-tools/contributor-atlas/build-app.sh --install
-open "$HOME/Applications/Contributor Atlas.app" --args --repo "$PWD"
-
-# Development and tests:
-swift run --package-path tools/contributor-atlas ContributorAtlas --repo "$PWD"
-swift test --package-path tools/contributor-atlas
-
-# Machine-readable analysis of the same data model:
-swift run --package-path tools/contributor-atlas ContributorAtlas --repo "$PWD" --report
+git clone https://github.com/mwufi/contributor-atlas.git
+cd contributor-atlas
+./build-app.sh --install        # builds and copies the app to ~/Applications
+open "$HOME/Applications/Contributor Atlas.app" --args --repo /path/to/your/repo
 ```
 
-The build also produces `dist/Contributor Atlas.app`. It is locally ad-hoc signed;
-public distribution would need an Apple Developer signature and notarization.
-The app remembers the last selected repository. **⌘O** opens another repository,
-**⌘R** refreshes history, and **⇧⌘E** exports filtered commits as CSV.
-**⌘[ / ⌘]** navigate back/forward; **⌘1–5** switch sections. The native toolbar
-also has back/forward buttons and a collapsible, resizable sidebar.
+Without `--install`, the build lands in `dist/Contributor Atlas.app`. The app is
+ad-hoc signed for local use; distributing it to others would need a Developer ID
+signature and notarization.
 
-## Views
+The app remembers the last repository you opened. You can also pick one with
+**Open repository…** in the sidebar.
 
-- **Overview:** GitHub-style annual contribution calendar, daily timeline, hourly
-  histogram, grouped contributor table with sparklines, weekday/hour heatmap.
-- **Contributors:** comparative activity and work-area matrix; select a person for
-  individual calendars, frequency, work profile, frequently touched files, and commits.
-- **Work areas:** contributor × area matrix and participation by category. Select a
-  matrix cell to intersect person and work-area filters.
-- **Commit history:** paginated, searchable evidence with a changed-file inspector.
-- **Methodology:** definitions, scope, identity heuristics and path rules.
+## Keyboard shortcuts
 
-All filters intersect: date range, person, area, search, people/bots, merges,
-selected day, weekday, and hour. Click heatmap cells or bars to drill down; clear
-chips to remove individual constraints. Timezones: Los Angeles, UTC, author-local.
-Export includes all matching commits, not only the visible page.
+| Shortcut | Action |
+| --- | --- |
+| ⌘O | Open another repository |
+| ⌘R | Refresh history |
+| ⇧⌘E | Export filtered commits as CSV |
+| ⌘[ / ⌘] | Back / forward |
+| ⌘1 – ⌘5 | Switch sections |
 
-## Data contract
+## Development
 
-History is pinned to the checkout’s HEAD at refresh. It includes reachable branch
-commits and excludes merges by default. Author dates drive activity; mailmapped
-authors drive attribution. Committers, coauthor trailers, PR reviews, issue activity,
-and uncommitted edits are outside scope. Shallow history produces a visible notice;
-the app never fetches or modifies the repository. Git reads path changes with rename
-and external diff handling disabled, so it needs tree metadata, not historical file
-contents. Git may obtain missing tree objects in a partial clone.
+```sh
+swift run ContributorAtlas --repo /path/to/repo               # run the app
+swift test                                                    # run the tests
+swift run ContributorAtlas --repo /path/to/repo --report      # machine-readable analysis (JSON)
+swift run -c release ContributorAtlas --repo /path/to/repo --benchmark
+```
 
-Matching normalized names and exact emails form identity groups. This heuristic can
-be disabled in Filters (then only equal mailmapped emails group). Each person’s
-inspector exposes their email aliases. Named automated accounts are detected with
-explicit patterns; this cannot determine whether human commits used AI tools.
+`--benchmark` times uncached overview and contributor aggregation plus cached
+lookups. It measures analytics only, not Git loading or frame presentation.
 
-Commits/day divides by all calendar days in the selected interval, including zero
-days. Commits/hour divides by 24 times that interval. These rates are not hours worked.
-Preset periods end on the latest authored repository date. All-history bounds come
-from repository timestamps, regardless of active contributor or category filters.
+### Project layout
 
-Work areas classify paths using `WorkArea.classify` in `Sources/AtlasCore/Models.swift`.
-The primary group is the largest changed-file-touch category in the filtered data.
-Each path per commit counts once. The matrix counts area-touching commits, so a commit
-can count in multiple columns. Work-area filters limit displayed file evidence to the
-selected area. Merges, when enabled, have no expanded file evidence. Renames count old
-and new paths. Large imports, generated changes, and formatting can skew touch counts;
-these are descriptions of recorded activity, not inferred job titles or performance.
+- `Sources/AtlasCore` holds Git parsing, identity grouping, path classification and
+  pure analytics. It has no UI dependencies and is what the tests exercise.
+- `Sources/ContributorAtlas` is the SwiftUI app: views, charts, the store, and
+  navigation history.
+- `Tests/AtlasCoreTests` covers zero-day denominators, merge handling, timezone
+  boundaries and DST, transitive aliases, intersecting filters, category
+  precedence, NUL-delimited path parsing, and a real temporary Git repository.
 
-## Implementation & verification
+### Customising work areas
 
-`AtlasCore` owns Git parsing, identity grouping, path classification and pure analytics.
-The app performs Git loading and analytics away from the UI thread, cancels superseded
-filter results, and presents errors without replacing the last successful snapshot.
-Calendar components and file categories are indexed once per repository snapshot.
-Contributor aggregates mutate in place rather than repeatedly copying growing maps.
-A 24-entry LRU cache restores recently visited analyses synchronously; navigation has
-no debounce. Only typed search waits 140 ms. Refresh clears the cache.
+Work areas come from path rules in `WorkArea.classify` in
+`Sources/AtlasCore/Models.swift`, and the first matching rule wins. The defaults
+were written for a TypeScript monorepo (web, mobile, backend, infrastructure,
+tests, docs, tooling), so other repositories will see more paths land in
+**Other**. Edit the rules to match your layout.
 
-Back/forward restores section, contributor, all filters, range label, and calendar year.
-Synchronous changes from one action form one history entry; continuous search typing
-coalesces. A new destination after going back clears the forward branch. History is
-bounded to 80 entries and resets on repository refresh. Scroll offsets, pagination,
-and transient sheets are not navigation-history entries.
+## How the numbers are calculated
 
-The window uses NavigationSplitView, the native sidebar List, standard title bar and
-system toolbar. macOS 26+ adds Liquid Glass to the floating filter bar via glassEffect;
-macOS 14–15 use regular material. Reduce Transparency uses an opaque filter surface.
-Native components follow system accent, light/dark appearance and accessibility
-preferences; there are no custom navigation animations or obligatory transitions.
-Charts retain readable content surfaces, following Apple's [material guidance](https://developer.apple.com/design/human-interface-guidelines/materials).
+**Scope.** History is pinned to the checkout's HEAD at refresh and includes every
+commit reachable from it. Merges are excluded by default. The app never fetches.
+Shallow clones show a notice. Git reads path changes with rename detection and
+external diffs disabled, so only tree metadata is needed, not file contents (Git
+may still fetch missing tree objects in a partial clone).
 
-Run `ContributorAtlas --repo /path/to/repo --benchmark` from the built app executable
-for uncached overview/contributor aggregation and cached lookup timings. These measure
-analytics, not end-to-end frame presentation or Git-loading latency.
-CSV cells are escaped and neutralized against spreadsheet formula execution.
+**Attribution.** Commits belong to their mailmapped Git author. Matching
+normalized names and exact emails are grouped into one person; turn this off in
+Filters to group only identical emails. Each person's inspector lists their email
+aliases. Bots are detected from explicit naming patterns. Committers, co-author
+trailers, PR reviews, issues and uncommitted edits are out of scope, and the app
+cannot tell whether a human's commits were AI-assisted.
 
-Tests cover zero-day denominators, merge handling, timezone boundaries and DST,
-transitive aliases, intersecting filters, category precedence, NUL-delimited path
-parsing and a real temporary Git repository. The standalone package does not change
-Cosign web/mobile UI, Convex functions, shared access contracts or production data.
+**Rates.** Commits/day divides by every calendar day in the selected range,
+including days with no commits. Commits/hour divides by 24 times that. These are
+calendar-normalized rates, not hours worked. Preset periods end on the latest
+authored date in the repository rather than today.
+
+**Work areas.** Each changed path counts once per commit. A person's primary area
+is the one with the most file touches under the current filters. The matrix
+counts commits touching each area, so one commit can appear in several columns.
+Renames count both paths. Large imports, generated code and reformatting can
+dominate touch counts. Work areas describe recorded activity; they are not job
+titles or performance measures.
+
+## Under the hood
+
+Git loading and analytics run off the main thread. Superseded filter results are
+cancelled, and errors are shown without discarding the last good snapshot.
+Calendar components and file categories are indexed once per snapshot, and a
+24-entry LRU cache makes recently visited views instant. Only typed search is
+debounced (140 ms).
+
+Back/forward restores the section, selected contributor, every filter, range
+label and calendar year. One action that changes several things is one history
+entry, and continuous typing coalesces. History holds up to 80 entries and resets
+on refresh.
